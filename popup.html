@@ -11,6 +11,10 @@
       <header><span class="brand-mark">H</span><div><h1>Helios</h1><p id="connection">Checking connection…</p></div><span id="status-dot" class="status-dot"></span></header>
       <section class="toolbar"><label class="switch-line">Intercept downloads<input id="interception" type="checkbox" /><span class="switch"></span></label><button id="open-options" class="text-button">Settings</button></section>
       <p id="error" class="error" hidden></p>
+      <button id="allow-loopback" class="text-button" type="button" hidden>Grant loopback access</button>
+      <button id="run-diagnostics" class="text-button" type="button">Run diagnostics</button>
+      <p id="diagnostics-origin" class="muted" aria-live="polite"></p>
+      <ol id="diagnostics-ports" class="diagnostic-list" aria-live="polite"></ol>
       <a id="pair-help" class="help-link" href="options.html" hidden>Pair with Helios in Settings</a>
       <h2>Recently sent</h2><ol id="recent" class="recent"></ol>
       <button id="open-helios" class="primary">Open Helios</button>

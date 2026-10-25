@@ -1,4 +1,4 @@
-import { bridgeClient, type AddItem } from "./bridge";
+import { bridgeClient, type AddItem, type BridgeResult } from "./bridge";
 import { filenameFromHeaders, type Header } from "./filename";
 import { ignoreSet } from "./ignore";
 import { maySendWebsiteContent, type CookiePermissionApi } from "./cookie-permissions";
@@ -92,7 +92,8 @@ export function registerInterception(): void {
         const tab = await browser.tabs.get(details.tabId).catch(() => undefined);
         if (!tab || tab.incognito) return {};
         candidate.incognito = tab.incognito;
-        if (!(await bridgeClient.isHealthy())) return {};
+        const healthy = await bridgeClient.isHealthy();
+        if (!healthy.ok || !healthy.value) return {};
         setTimeout(() => void transferIntercepted(candidate, settings), 0);
         return { cancel: true };
       } catch {
@@ -132,8 +133,8 @@ export async function addWithCookiePermission(
   item: AddItem,
   settings: Awaited<ReturnType<typeof getSettings>>,
   permissions: CookiePermissionApi = browser.permissions as unknown as CookiePermissionApi,
-  add: (mode: "start" | "ask", items: AddItem[]) => Promise<unknown> = (selectedMode, items) => bridgeClient.add(selectedMode, items)
-): Promise<unknown> {
+  add: (mode: "start" | "ask", items: AddItem[]) => Promise<BridgeResult<unknown>> = (selectedMode, items) => bridgeClient.add(selectedMode, items)
+): Promise<BridgeResult<unknown>> {
   let safeItem = item;
   if ((item.cookie || item.userAgent) && !(await maySendWebsiteContent(settings.consentAccepted, settings.sendCookies, permissions))) {
     const { cookie: _cookie, userAgent: _userAgent, ...withoutBrowserDetails } = item;
@@ -147,7 +148,8 @@ async function transferIntercepted(details: InterceptDetails, settings: Awaited<
   const label = filename ?? safeHost(details.url);
   try {
     const item = await createAddItem(details.url, details.originUrl ?? details.documentUrl, filename, settings);
-    await addWithCookiePermission(settings.askBeforeAdding ? "ask" : "start", item, settings);
+    const result = await addWithCookiePermission(settings.askBeforeAdding ? "ask" : "start", item, settings);
+    if (!result.ok) throw new Error(result.error.code);
   } catch {
     await recordQuietly(label, "start", "error");
     await setErrorBadge().catch(() => {});
@@ -173,7 +175,8 @@ export async function sendFromMenu(item: AddItem, settings: Awaited<ReturnType<t
   const mode = settings.askBeforeAdding ? "ask" : "start";
   const label = item.filename ?? safeHost(item.url);
   try {
-    await addWithCookiePermission(mode, item, settings);
+    const result = await addWithCookiePermission(mode, item, settings);
+    if (!result.ok) throw new Error(result.error.code);
   } catch {
     await recordQuietly(label, mode, "error");
     await setErrorBadge().catch(() => {});

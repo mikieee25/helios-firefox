@@ -18,26 +18,26 @@ describe("login cookie permission", () => {
     const permissionApi = permissions({ data_collection: [] }, false);
     const getCookies = vi.fn(async () => [{ name: "session", value: "secret" }]);
     const item = await createAddItem(url, "https://example.test/page", "archive.zip", settings, permissionApi, getCookies);
-    const add = vi.fn(async (mode: "start" | "ask", items: Array<{ url: string; cookie?: string }>) => JSON.stringify({ mode, items }));
+    const add = vi.fn(async (mode: "start" | "ask", items: Array<{ url: string; cookie?: string }>) => ({ ok: true as const, value: { mode, items } }));
     await addWithCookiePermission("start", item, settings, permissionApi, add);
 
     expect(getCookies).not.toHaveBeenCalled();
-    const body = JSON.parse(String(await add.mock.results[0]?.value));
-    expect(body.items).toEqual([{ url, referrer: "https://example.test/page", filename: "archive.zip" }]);
-    expect(body.items[0]).not.toHaveProperty("cookie");
-    expect(body.items[0]).not.toHaveProperty("userAgent");
+    const body = await add.mock.results[0]?.value;
+    expect(body.value.items).toEqual([{ url, referrer: "https://example.test/page", filename: "archive.zip" }]);
+    expect(body.value.items[0]).not.toHaveProperty("cookie");
+    expect(body.value.items[0]).not.toHaveProperty("userAgent");
   });
 
   it("includes cookies and browser details when Firefox permission is granted", async () => {
     const permissionApi = permissions({ data_collection: ["websiteContent"] }, true);
     const getCookies = vi.fn(async () => [{ name: "session", value: "secret" }]);
     const item = await createAddItem(url, undefined, undefined, settings, permissionApi, getCookies);
-    const add = vi.fn(async (mode: "start" | "ask", items: Array<{ url: string; cookie?: string }>) => JSON.stringify({ mode, items }));
+    const add = vi.fn(async (mode: "start" | "ask", items: Array<{ url: string; cookie?: string }>) => ({ ok: true as const, value: { mode, items } }));
     await addWithCookiePermission("start", item, settings, permissionApi, add);
 
     expect(getCookies).toHaveBeenCalledWith(url);
-    const body = JSON.parse(String(await add.mock.results[0]?.value));
-    expect(body.items).toEqual([{ url, userAgent: expect.any(String), cookie: "session=secret" }]);
+    const body = await add.mock.results[0]?.value;
+    expect(body.value.items).toEqual([{ url, userAgent: expect.any(String), cookie: "session=secret" }]);
   });
 
   it("uses the local setting when Firefox has no data collection permission API", async () => {

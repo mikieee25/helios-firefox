@@ -12,4 +12,10 @@ module.exports = {
     "web-ext.config.cjs",
     ".gitignore",
   ],
+  run: {
+    firefox: "C:\\Program Files\\Zen Browser\\zen.exe",
+    firefoxProfile: "C:\\Users\\mklgr\\.helios-zen-test-profile",
+    profileCreateIfMissing: true,
+    keepProfileChanges: true,
+  },
 };

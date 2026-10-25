@@ -16,10 +16,20 @@
         <button id="accept-consent" class="primary">I understand and accept</button>
       </section>
       <section class="card">
-        <div class="section-heading"><div><h2>Pairing</h2><p id="pair-status" class="muted">Not paired</p></div><span id="pair-dot" class="status-dot"></span></div>
+        <div class="section-heading"><div><h2>Pairing</h2><p id="pair-status" class="muted">Not paired</p><p id="bridge-status" class="muted" aria-live="polite">Checking local bridge…</p></div><span id="pair-dot" class="status-dot"></span></div>
         <form id="pair-form" class="pair-form"><label>Six-digit code<input id="pair-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label><button class="primary" type="submit">Pair with Helios</button></form>
         <p id="pair-error" class="error" role="alert" hidden></p>
-        <button id="forget-pairing" class="danger-button" type="button">Forget this pairing</button>
+        <button id="allow-loopback" class="text-button" type="button" hidden>Grant loopback access</button>
+        <button id="forget-pairing" class="secondary-button" type="button">Forget this pairing</button>
+      </section>
+      <section class="card" aria-labelledby="diagnostics-title">
+        <div class="section-heading"><h2 id="diagnostics-title">Connection diagnostics</h2><button id="run-diagnostics" class="text-button" type="button">Run diagnostics</button></div>
+        <p id="diagnostics-origin" class="muted" aria-live="polite"></p>
+        <ol id="diagnostics-ports" class="diagnostic-list" aria-live="polite"></ol>
+        <p id="diagnostics-summary" class="diagnostics-success" role="status" hidden></p>
+        <ul id="diagnostics-guidance" class="diagnostic-guidance" aria-live="polite"></ul>
+        <p id="diagnostics-error" class="error" role="alert" hidden></p>
+        <button id="diagnostics-allow-loopback" class="text-button" type="button" hidden>Grant loopback access</button>
       </section>
       <section class="card">
         <div class="section-heading"><div><h2>Interception</h2><p class="muted">Only applies to supported GET downloads.</p></div><label class="switch-line">Enabled<input id="interception" type="checkbox" /><span class="switch"></span></label></div>

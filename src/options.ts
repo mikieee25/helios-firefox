@@ -1,4 +1,4 @@
-import { bridgeClient } from "./bridge";
+import { bridgeClient, bridgeErrorGuidance, BridgeError } from "./bridge";
 import { WEBSITE_CONTENT, cookiePermissionState, type CookiePermissionApi } from "./cookie-permissions";
 import { getSettings, isPaired, updateSettings } from "./settings";
 
@@ -6,7 +6,15 @@ const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) 
 const form = byId<HTMLFormElement>("pair-form");
 const pairCode = byId<HTMLInputElement>("pair-code");
 const pairStatus = byId<HTMLParagraphElement>("pair-status");
+const bridgeStatus = byId<HTMLParagraphElement>("bridge-status");
 const pairError = byId<HTMLParagraphElement>("pair-error");
+const allowLoopback = byId<HTMLButtonElement>("allow-loopback");
+const diagnosticsOrigin = byId<HTMLParagraphElement>("diagnostics-origin");
+const diagnosticsPorts = byId<HTMLOListElement>("diagnostics-ports");
+const diagnosticsSummary = byId<HTMLParagraphElement>("diagnostics-summary");
+const diagnosticsGuidance = byId<HTMLUListElement>("diagnostics-guidance");
+const diagnosticsError = byId<HTMLParagraphElement>("diagnostics-error");
+const diagnosticsAllowLoopback = byId<HTMLButtonElement>("diagnostics-allow-loopback");
 const forgetButton = byId<HTMLButtonElement>("forget-pairing");
 const consentCard = byId<HTMLElement>("consent");
 const interceptToggle = byId<HTMLInputElement>("interception");
@@ -50,6 +58,16 @@ async function loadOptions(): Promise<void> {
   pairStatus.textContent = paired ? "Paired with Helios" : "Not paired";
   byId<HTMLElement>("pair-dot").className = `status-dot ${paired ? "online" : "offline"}`;
   forgetButton.hidden = !paired;
+  const bridge = await bridgeClient.ping();
+  if (bridge.ok) {
+    bridgeStatus.textContent = paired
+      ? `Local bridge connected · Helios ${bridge.value.version}`
+      : `Helios ${bridge.value.version} is running. Enter a pairing code to connect this add-on.`;
+    pairError.hidden = true;
+    allowLoopback.hidden = true;
+  } else {
+    showBridgeError(bridgeStatus, allowLoopback, bridge.error);
+  }
 }
 
 form.addEventListener("submit", (event) => {
@@ -59,34 +77,94 @@ form.addEventListener("submit", (event) => {
 
 async function pair(): Promise<void> {
   pairError.hidden = true;
+  allowLoopback.hidden = true;
   if (!/^\d{6}$/.test(pairCode.value)) {
-    showPairError("Enter the six-digit code shown in Helios Settings.");
+    pairError.textContent = "Enter the six-digit code shown in Helios Settings.";
+    pairError.hidden = false;
     return;
   }
-  try {
-    const platform = await browser.runtime.getPlatformInfo();
-    const result = await bridgeClient.pair(pairCode.value, `Firefox on ${platform.os}`);
-    pairStatus.textContent = `Paired · Helios ${result.version}`;
-    pairCode.value = "";
-    await loadOptions();
-  } catch (error) {
-    showPairError(error instanceof Error ? error.message : "Pairing failed. Check the code and try again.");
+  const platform = await browser.runtime.getPlatformInfo();
+  const result = await bridgeClient.pair(pairCode.value, `Firefox on ${platform.os}`);
+  if (!result.ok) {
+    showBridgeError(pairError, allowLoopback, result.error);
+    return;
   }
+  pairStatus.textContent = `Paired · Helios ${result.value.version}`;
+  pairCode.value = "";
+  await loadOptions();
 }
 
-function showPairError(message: string): void {
-  pairError.textContent = message;
-  pairError.hidden = false;
+function showBridgeError(element: HTMLParagraphElement, allowButton: HTMLButtonElement, error: BridgeError): void {
+  const guidance = bridgeErrorGuidance(error);
+  element.textContent = `${guidance.message} ${guidance.nextStep}`;
+  element.hidden = false;
+  allowButton.hidden = error.code !== "no_host_permission";
 }
 
 forgetButton.addEventListener("click", () => {
   void (async () => {
-    await bridgeClient.forget();
+    const result = await bridgeClient.forget();
+    if (!result.ok) {
+      showBridgeError(pairError, allowLoopback, result.error);
+      return;
+    }
     await updateSettings({ interceptionEnabled: false });
     await loadOptions();
     pairStatus.textContent = "Pairing removed";
   })();
 });
+
+allowLoopback.addEventListener("click", () => void requestLoopbackAccess(pairError, allowLoopback));
+diagnosticsAllowLoopback.addEventListener("click", () => void requestLoopbackAccess(diagnosticsError, diagnosticsAllowLoopback));
+byId<HTMLButtonElement>("run-diagnostics").addEventListener("click", () => void runDiagnostics());
+
+async function requestLoopbackAccess(target: HTMLParagraphElement, button: HTMLButtonElement): Promise<void> {
+  const result = await bridgeClient.requestHostPermission();
+  if (!result.ok) {
+    showBridgeError(target, button, result.error);
+    return;
+  }
+  target.textContent = "Loopback access granted. Try the connection again.";
+  target.hidden = false;
+  button.hidden = true;
+}
+
+async function runDiagnostics(): Promise<void> {
+  diagnosticsPorts.replaceChildren();
+  diagnosticsSummary.hidden = true;
+  diagnosticsSummary.textContent = "";
+  diagnosticsGuidance.replaceChildren();
+  diagnosticsError.hidden = true;
+  diagnosticsAllowLoopback.hidden = true;
+  const result = await bridgeClient.diagnose();
+  if (!result.ok) {
+    showBridgeError(diagnosticsError, diagnosticsAllowLoopback, result.error);
+    return;
+  }
+  diagnosticsOrigin.textContent = `Extension origin: ${result.value.extensionOrigin}`;
+  for (const port of result.value.ports) {
+    const row = document.createElement("li");
+    row.textContent = port.error
+      ? `${port.port}: ${port.kind ?? "unknown"}${port.status === undefined ? "" : ` · HTTP ${port.status}`} · ${port.message ?? port.error}`
+      : `${port.port}: HTTP ${port.status} · ${port.message ?? "Helios responded."}`;
+    diagnosticsPorts.append(row);
+  }
+  const reachablePorts = result.value.ports.filter((port) => !port.error && port.status === 200).map((port) => port.port);
+  if (reachablePorts.length) {
+    diagnosticsSummary.textContent = `Helios responded on port${reachablePorts.length === 1 ? "" : "s"} ${reachablePorts.join(", ")}. Timeouts on other ports are expected when nothing is listening there.`;
+    diagnosticsSummary.hidden = false;
+    return;
+  }
+  const errorCodes = [...new Set(result.value.ports.flatMap((port) => port.error ? [port.error] : []))];
+  for (const code of errorCodes) {
+    const port = result.value.ports.find((entry) => entry.error === code);
+    const guidance = bridgeErrorGuidance(new BridgeError(port?.kind ?? "client", port?.message ?? code, code, port?.status));
+    const row = document.createElement("li");
+    row.textContent = `${guidance.message} ${guidance.nextStep}`;
+    diagnosticsGuidance.append(row);
+  }
+  diagnosticsAllowLoopback.hidden = !errorCodes.includes("no_host_permission");
+}
 
 byId<HTMLButtonElement>("accept-consent").addEventListener("click", () => {
   void (async () => {

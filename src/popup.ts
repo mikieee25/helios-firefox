@@ -1,4 +1,4 @@
-import { bridgeClient } from "./bridge";
+import { bridgeClient, bridgeErrorGuidance, type BridgeError } from "./bridge";
 import { getRecentSent } from "./sent";
 import { getSettings, isPaired, updateSettings } from "./settings";
 
@@ -6,6 +6,9 @@ const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) 
 const connection = byId<HTMLParagraphElement>("connection");
 const statusDot = byId<HTMLSpanElement>("status-dot");
 const error = byId<HTMLParagraphElement>("error");
+const allowLoopback = byId<HTMLButtonElement>("allow-loopback");
+const diagnosticsOrigin = byId<HTMLParagraphElement>("diagnostics-origin");
+const diagnosticsPorts = byId<HTMLOListElement>("diagnostics-ports");
 const pairHelp = byId<HTMLAnchorElement>("pair-help");
 const interception = byId<HTMLInputElement>("interception");
 const recent = byId<HTMLOListElement>("recent");
@@ -28,32 +31,45 @@ async function refresh(): Promise<void> {
   }
 
   if (!paired) {
-    try {
-      const ping = await bridgeClient.ping();
-      connection.textContent = `Helios ${ping.version} · Not paired`;
+    const result = await bridgeClient.ping();
+    if (result.ok) {
+      connection.textContent = `Helios ${result.value.version} · Not paired`;
       statusDot.className = "status-dot online";
-    } catch {
-      connection.textContent = "Helios is not reachable · Not paired";
+      clearError();
+    } else {
+      connection.textContent = "Could not connect to Helios";
       statusDot.className = "status-dot offline";
+      showBridgeError(result.error);
     }
-    error.textContent = "Pair this extension with Helios to start sending downloads.";
-    error.hidden = false;
     pairHelp.hidden = false;
     return;
   }
-  try {
-    const status = await bridgeClient.status();
-    connection.textContent = `Connected · Helios ${status.version}`;
+
+  const result = await bridgeClient.status();
+  if (result.ok) {
+    connection.textContent = `Connected · Helios ${result.value.version}`;
     statusDot.className = "status-dot online";
-    error.hidden = true;
+    clearError();
     pairHelp.hidden = true;
-  } catch {
-    connection.textContent = "Helios is not reachable";
+  } else {
+    connection.textContent = "Could not connect to Helios";
     statusDot.className = "status-dot offline";
-    error.textContent = "Start Helios to send downloads.";
-    error.hidden = false;
-    pairHelp.hidden = true;
+    showBridgeError(result.error);
+    pairHelp.hidden = result.error.code !== "unauthorized" && result.error.code !== "bad_code";
   }
+}
+
+function showBridgeError(bridgeError: BridgeError): void {
+  const guidance = bridgeErrorGuidance(bridgeError);
+  error.textContent = `${guidance.message} ${guidance.nextStep}`;
+  error.hidden = false;
+  allowLoopback.hidden = bridgeError.code !== "no_host_permission";
+}
+
+function clearError(): void {
+  error.hidden = true;
+  error.textContent = "";
+  allowLoopback.hidden = true;
 }
 
 interception.addEventListener("change", () => {
@@ -61,10 +77,38 @@ interception.addEventListener("change", () => {
 });
 byId<HTMLButtonElement>("open-options").addEventListener("click", () => void browser.runtime.openOptionsPage());
 byId<HTMLButtonElement>("open-helios").addEventListener("click", () => {
-  void bridgeClient.show().catch(() => {
-    error.textContent = "Could not open Helios. Check that the desktop app is running.";
-    error.hidden = false;
-  });
+  void (async () => {
+    const result = await bridgeClient.show();
+    if (result.ok) clearError();
+    else showBridgeError(result.error);
+  })();
+});
+allowLoopback.addEventListener("click", () => {
+  void (async () => {
+    const result = await bridgeClient.requestHostPermission();
+    if (result.ok) {
+      clearError();
+      await refresh();
+    } else showBridgeError(result.error);
+  })();
+});
+byId<HTMLButtonElement>("run-diagnostics").addEventListener("click", () => {
+  void (async () => {
+    diagnosticsPorts.replaceChildren();
+    const result = await bridgeClient.diagnose();
+    if (!result.ok) {
+      showBridgeError(result.error);
+      return;
+    }
+    diagnosticsOrigin.textContent = `Extension origin: ${result.value.extensionOrigin}`;
+    for (const port of result.value.ports) {
+      const row = document.createElement("li");
+      row.textContent = port.error
+        ? `${port.port}: ${port.kind ?? "unknown"}${port.status === undefined ? "" : ` · HTTP ${port.status}`} · ${port.message ?? port.error}`
+        : `${port.port}: HTTP ${port.status} · ${port.message ?? "Helios responded."}`;
+      diagnosticsPorts.append(row);
+    }
+  })();
 });
 pairHelp.addEventListener("click", (event) => {
   event.preventDefault();
