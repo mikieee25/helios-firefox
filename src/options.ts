@@ -15,6 +15,8 @@ const diagnosticsSummary = byId<HTMLParagraphElement>("diagnostics-summary");
 const diagnosticsGuidance = byId<HTMLUListElement>("diagnostics-guidance");
 const diagnosticsError = byId<HTMLParagraphElement>("diagnostics-error");
 const diagnosticsAllowLoopback = byId<HTMLButtonElement>("diagnostics-allow-loopback");
+const handoffLast = byId<HTMLParagraphElement>("handoff-last");
+const handoffTimings = byId<HTMLOListElement>("handoff-timings");
 const forgetButton = byId<HTMLButtonElement>("forget-pairing");
 const consentCard = byId<HTMLElement>("consent");
 const interceptToggle = byId<HTMLInputElement>("interception");
@@ -31,6 +33,7 @@ const cookiePermissions = browser.permissions as unknown as CookiePermissionApi;
 let hasCookiePermissionApi = true;
 
 void loadOptions();
+window.setInterval(() => void loadRecentHandoffTimings(), 2000);
 
 async function loadOptions(): Promise<void> {
   const [settings, paired] = await Promise.all([getSettings(), isPaired()]);
@@ -58,6 +61,7 @@ async function loadOptions(): Promise<void> {
   pairStatus.textContent = paired ? "Paired with Helios" : "Not paired";
   byId<HTMLElement>("pair-dot").className = `status-dot ${paired ? "online" : "offline"}`;
   forgetButton.hidden = !paired;
+  await loadRecentHandoffTimings();
   const bridge = await bridgeClient.ping();
   if (bridge.ok) {
     bridgeStatus.textContent = paired
@@ -136,6 +140,7 @@ async function runDiagnostics(): Promise<void> {
   diagnosticsGuidance.replaceChildren();
   diagnosticsError.hidden = true;
   diagnosticsAllowLoopback.hidden = true;
+  await loadRecentHandoffTimings();
   const result = await bridgeClient.diagnose();
   if (!result.ok) {
     showBridgeError(diagnosticsError, diagnosticsAllowLoopback, result.error);
@@ -164,6 +169,24 @@ async function runDiagnostics(): Promise<void> {
     diagnosticsGuidance.append(row);
   }
   diagnosticsAllowLoopback.hidden = !errorCodes.includes("no_host_permission");
+}
+
+function renderHandoffTimings(entries: Array<{ listenerMs: number; cookiesMs: number; addMs: number }>): void {
+  handoffTimings.replaceChildren();
+  const latest = entries.at(-1);
+  handoffLast.textContent = latest
+    ? `Last hand-off: ${latest.addMs} ms (listener ${latest.listenerMs} ms · cookies ${latest.cookiesMs} ms · add ${latest.addMs} ms)`
+    : "No intercepted downloads recorded in this session.";
+  for (const timing of [...entries].reverse()) {
+    const row = document.createElement("li");
+    row.textContent = `Listener ${timing.listenerMs} ms · cookies ${timing.cookiesMs} ms · add ${timing.addMs} ms`;
+    handoffTimings.append(row);
+  }
+}
+
+async function loadRecentHandoffTimings(): Promise<void> {
+  const entries = await browser.runtime.sendMessage({ type: "helios:intercept-timings" }).catch(() => []);
+  if (Array.isArray(entries)) renderHandoffTimings(entries);
 }
 
 byId<HTMLButtonElement>("accept-consent").addEventListener("click", () => {

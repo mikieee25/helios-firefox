@@ -4,6 +4,17 @@ import { ignoreSet } from "./ignore";
 import { maySendWebsiteContent, type CookiePermissionApi } from "./cookie-permissions";
 import { getSettings, isPaired } from "./settings";
 import { recordSent } from "./sent";
+import { appendInterceptTiming, type InterceptTiming } from "./intercept-timings";
+
+let interceptTimings: InterceptTiming[] = [];
+
+export function getInterceptTimings(): InterceptTiming[] {
+  return interceptTimings.map((entry) => ({ ...entry }));
+}
+
+function recordInterceptTiming(entry: InterceptTiming): void {
+  interceptTimings = appendInterceptTiming(interceptTimings, entry);
+}
 
 export interface InterceptDetails {
   url: string;
@@ -83,6 +94,7 @@ export function shouldIntercept(details: InterceptDetails, settings: InterceptSe
 export function registerInterception(): void {
   browser.webRequest.onHeadersReceived.addListener(
     async (details) => {
+      const listenerStarted = performance.now();
       try {
         const settings = await getSettings();
         if (!settings.consentAccepted || !settings.interceptionEnabled || !(await isPaired())) return {};
@@ -94,7 +106,12 @@ export function registerInterception(): void {
         candidate.incognito = tab.incognito;
         const healthy = await bridgeClient.isHealthy();
         if (!healthy.ok || !healthy.value) return {};
-        setTimeout(() => void transferIntercepted(candidate, settings), 0);
+        const timing: InterceptTiming = {
+          listenerMs: elapsedMs(listenerStarted),
+          cookiesMs: 0,
+          addMs: 0,
+        };
+        setTimeout(() => void transferIntercepted(candidate, settings, timing), 0);
         return { cancel: true };
       } catch {
         return {};
@@ -111,13 +128,20 @@ export async function createAddItem(
   filename: string | undefined,
   settings: Awaited<ReturnType<typeof getSettings>>,
   permissions: CookiePermissionApi = browser.permissions as unknown as CookiePermissionApi,
-  readCookies: (url: string) => Promise<Array<{ name: string; value: string }>> = (value) => browser.cookies.getAll({ url: value })
+  readCookies: (url: string) => Promise<Array<{ name: string; value: string }>> = (value) => browser.cookies.getAll({ url: value }),
+  onCookiesRead?: (durationMs: number) => void
 ): Promise<AddItem> {
   const scheme = safeScheme(url);
   const maySendDetails = await maySendWebsiteContent(settings.consentAccepted, settings.sendCookies, permissions);
-  const cookies = maySendDetails && (scheme === "http:" || scheme === "https:")
-    ? await readCookies(url)
-    : [];
+  let cookies: Array<{ name: string; value: string }> = [];
+  if (maySendDetails && (scheme === "http:" || scheme === "https:")) {
+    const started = performance.now();
+    try {
+      cookies = await readCookies(url);
+    } finally {
+      onCookiesRead?.(elapsedMs(started));
+    }
+  }
   const cookie = cookies.map(({ name, value }) => `${name}=${value}`).join("; ");
   return {
     url,
@@ -133,22 +157,28 @@ export async function addWithCookiePermission(
   item: AddItem,
   settings: Awaited<ReturnType<typeof getSettings>>,
   permissions: CookiePermissionApi = browser.permissions as unknown as CookiePermissionApi,
-  add: (mode: "start" | "ask", items: AddItem[]) => Promise<BridgeResult<unknown>> = (selectedMode, items) => bridgeClient.add(selectedMode, items)
+  add: (mode: "start" | "ask", items: AddItem[]) => Promise<BridgeResult<unknown>> = (selectedMode, items) => bridgeClient.add(selectedMode, items),
+  onAddRoundTrip?: (durationMs: number) => void
 ): Promise<BridgeResult<unknown>> {
   let safeItem = item;
   if ((item.cookie || item.userAgent) && !(await maySendWebsiteContent(settings.consentAccepted, settings.sendCookies, permissions))) {
     const { cookie: _cookie, userAgent: _userAgent, ...withoutBrowserDetails } = item;
     safeItem = withoutBrowserDetails;
   }
-  return add(mode, [safeItem]);
+  const started = performance.now();
+  try {
+    return await add(mode, [safeItem]);
+  } finally {
+    onAddRoundTrip?.(elapsedMs(started));
+  }
 }
 
-async function transferIntercepted(details: InterceptDetails, settings: Awaited<ReturnType<typeof getSettings>>): Promise<void> {
+async function transferIntercepted(details: InterceptDetails, settings: Awaited<ReturnType<typeof getSettings>>, timing: InterceptTiming): Promise<void> {
   const filename = filenameFromHeaders(details.responseHeaders);
   const label = filename ?? safeHost(details.url);
   try {
-    const item = await createAddItem(details.url, details.originUrl ?? details.documentUrl, filename, settings);
-    const result = await addWithCookiePermission(settings.askBeforeAdding ? "ask" : "start", item, settings);
+    const item = await createAddItem(details.url, details.originUrl ?? details.documentUrl, filename, settings, undefined, undefined, (ms) => { timing.cookiesMs = ms; });
+    const result = await addWithCookiePermission(settings.askBeforeAdding ? "ask" : "start", item, settings, undefined, undefined, (ms) => { timing.addMs = ms; });
     if (!result.ok) throw new Error(result.error.code);
   } catch {
     await recordQuietly(label, "start", "error");
@@ -164,11 +194,17 @@ async function transferIntercepted(details: InterceptDetails, settings: Awaited<
     } else {
       await notify(settings.notifications, "Helios could not add this download.").catch(() => {});
     }
+    recordInterceptTiming(timing);
     return;
   }
+  recordInterceptTiming(timing);
   await recordQuietly(label, settings.askBeforeAdding ? "ask" : "start", "sent");
   await notify(settings.notifications, `Added: ${label}`).catch(() => {});
   await clearErrorBadge().catch(() => {});
+}
+
+function elapsedMs(started: number): number {
+  return Math.max(0, Math.round(performance.now() - started));
 }
 
 export async function sendFromMenu(item: AddItem, settings: Awaited<ReturnType<typeof getSettings>>): Promise<void> {

@@ -1,7 +1,12 @@
-import { createAddItem, registerInterception, sendFromMenu } from "./intercept";
+import { createAddItem, getInterceptTimings, registerInterception, sendFromMenu } from "./intercept";
 import { DEFAULT_SETTINGS, getSettings } from "./settings";
 
 registerInterception();
+
+browser.runtime.onMessage.addListener((message) => {
+  if (message?.type === "helios:intercept-timings") return Promise.resolve(getInterceptTimings());
+  return undefined;
+});
 
 browser.runtime.onInstalled.addListener(async (details) => {
   const saved = await browser.storage.local.get("settings");

@@ -31,6 +31,38 @@ function clientFor(
 }
 
 describe("bridge client results", () => {
+  it("uses the browser fetch context for ping, pairing, and adding without an injected fetcher", async () => {
+    const fetcher = async function (this: unknown, input: RequestInfo | URL): Promise<Response> {
+      if (this !== globalThis && this !== undefined) {
+        throw new TypeError("'fetch' called on an object that does not implement interface Window");
+      }
+      const url = String(input);
+      if (url.endsWith("/v1/ping")) {
+        return new Response(JSON.stringify({ app: "helios", bridge: 1, version: "x", paired: false }), { status: 200 });
+      }
+      if (url.endsWith("/v1/pair")) return new Response(JSON.stringify({ token: "paired-token" }), { status: 200 });
+      if (url.endsWith("/v1/add")) return new Response(JSON.stringify({ ok: true, gids: ["gid-1"] }), { status: 200 });
+      return new Response("Not found", { status: 404 });
+    };
+    vi.stubGlobal("fetch", fetcher as typeof fetch);
+    try {
+      const client = createBridgeClient(
+        memoryStorage(),
+        undefined,
+        Date.now,
+        allowedPermissions(),
+        () => "moz-extension://test-extension"
+      );
+
+      expect(await client.ping()).toMatchObject({ ok: true, value: { app: "helios", version: "x" } });
+      expect(await client.pair("123456", "Firefox on windows")).toMatchObject({ ok: true, value: { app: "helios" } });
+      expect(await client.add("start", [{ url: "https://files.example.test/file.zip" }]))
+        .toMatchObject({ ok: true, value: { ok: true, gids: ["gid-1"] } });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns no_host_permission without probing when loopback access is denied", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const permissions = allowedPermissions(false);
