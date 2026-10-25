@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Helios integration settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body>
+    <main class="settings-page">
+      <header class="page-heading"><span class="brand-mark">H</span><div><p class="eyebrow">Firefox extension</p><h1>Helios integration</h1></div></header>
+      <section id="consent" class="card consent" hidden>
+        <h2>Before you enable interception</h2>
+        <p>For a download, this extension sends the URL, referrer, file name, and the fact a download was requested to the Helios desktop app at 127.0.0.1 on this computer. Cookies and browser details are sent only if you separately enable them and grant Firefox's optional website content permission.</p>
+        <p>Helios listens on this computer only. Nothing is sent to the developer or a remote server, and the extension has no analytics. You can keep interception off or change these settings later.</p>
+        <button id="accept-consent" class="primary">I understand and accept</button>
+      </section>
+      <section class="card">
+        <div class="section-heading"><div><h2>Pairing</h2><p id="pair-status" class="muted">Not paired</p></div><span id="pair-dot" class="status-dot"></span></div>
+        <form id="pair-form" class="pair-form"><label>Six-digit code<input id="pair-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label><button class="primary" type="submit">Pair with Helios</button></form>
+        <p id="pair-error" class="error" role="alert" hidden></p>
+        <button id="forget-pairing" class="danger-button" type="button">Forget this pairing</button>
+      </section>
+      <section class="card">
+        <div class="section-heading"><div><h2>Interception</h2><p class="muted">Only applies to supported GET downloads.</p></div><label class="switch-line">Enabled<input id="interception" type="checkbox" /><span class="switch"></span></label></div>
+        <label class="field">Minimum file size (MB)<input id="minimum-size" type="number" min="0" step="1" /></label>
+        <label class="field">Exclude hosts (one host or suffix per line)<textarea id="exclude-hosts" rows="5" spellcheck="false"></textarea></label>
+        <label class="check-row"><input id="ask-before-adding" type="checkbox" /> Ask before adding downloads</label>
+        <label class="check-row"><input id="fallback" type="checkbox" /> Fall back to the browser if Helios is unavailable</label>
+        <label class="check-row"><input id="notifications" type="checkbox" /> Show notifications</label>
+        <label class="check-row"><input id="send-cookies" type="checkbox" /> Send login cookies and browser details to Helios</label>
+        <p class="muted">Cookies and the browser name are sent only to the Helios app on this computer, so it can download files that need your login.</p>
+        <p id="send-cookies-status" class="muted" aria-live="polite"></p>
+        <p id="save-status" class="muted" aria-live="polite"></p>
+      </section>
+      <section class="card"><h2>Privacy</h2><p class="muted">Download URLs, referrers, and file names go to the Helios app at 127.0.0.1. Cookies and browser details are sent only when Firefox permission is granted and this switch is on. Nothing is stored outside the browser profile by this extension; Helios may store data it receives. There is no analytics or remote service.</p></section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,7 @@
+node_modules/
+*.zip
+web-ext-artifacts/
+background.js
+popup.js
+options.js
+consent.js
