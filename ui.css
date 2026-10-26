@@ -4,7 +4,7 @@ body { margin: 0; min-width: 320px; background: #101015; color: #e9e9f0; }
 main { width: min(760px, 100% - 32px); margin: 32px auto; }
 .popup main { width: 360px; margin: 0; padding: 18px; }
 header { display:flex; align-items:center; gap:12px; }
-.brand-mark { display:grid; place-items:center; width:38px; height:38px; border-radius:12px; color:#06131a; background:var(--accent); font-weight:800; font-size:21px; }
+.brand-mark { display:block; flex:none; width:38px; height:38px; object-fit:contain; }
 h1,h2,p { margin-top:0; }
 h1 { margin-bottom:2px; font-size:22px; }
 h2 { font-size:16px; margin:0 0 12px; }

@@ -3,6 +3,11 @@
   "name": "Helios Download Bridge",
   "description": "Send browser downloads to the Helios desktop app.",
   "version": "0.1.0",
+  "icons": {
+    "32": "helios-32.png",
+    "64": "helios-64.png",
+    "128": "helios-128.png"
+  },
   "permissions": [
     "storage",
     "downloads",
@@ -14,7 +19,15 @@
   ],
   "host_permissions": ["<all_urls>"],
   "background": { "scripts": ["background.js"] },
-  "action": { "default_title": "Helios", "default_popup": "popup.html" },
+  "action": {
+    "default_title": "Helios",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "32": "helios-32.png",
+      "64": "helios-64.png",
+      "128": "helios-128.png"
+    }
+  },
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "browser_specific_settings": {
     "gecko": {
