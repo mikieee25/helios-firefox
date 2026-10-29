@@ -31,7 +31,7 @@
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "browser_specific_settings": {
     "gecko": {
-      "id": "helios@mikieee25.dev",
+      "id": "helios-firefox@mikieee25.dev",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["browsingActivity", "websiteActivity"],
