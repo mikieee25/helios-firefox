@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Helios Download Bridge",
   "description": "Send browser downloads to the Helios desktop app.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "icons": {
     "32": "helios-32.png",
     "64": "helios-64.png",

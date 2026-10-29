@@ -53,9 +53,29 @@ function headerValue(headers: Header[], name: string): string | undefined {
 function isExcludedHost(host: string, exclusions: string[]): boolean {
   const entries = [...SENSITIVE_HOSTS, ...exclusions];
   return entries.some((entry) => {
-    const suffix = entry.trim().toLowerCase().replace(/^\*\./, "").replace(/^\./, "");
-    return suffix && (host === suffix || host.endsWith(`.${suffix}`));
+    const suffix = normalizeHost(entry);
+    const normalizedHost = normalizeHost(host);
+    return !!suffix && !!normalizedHost && (normalizedHost === suffix || normalizedHost.endsWith(`.${suffix}`));
   });
+}
+
+function normalizeHost(value: string): string {
+  const trimmed = value.trim().toLowerCase().replace(/^\*\./, "").replace(/^\./, "");
+  if (!trimmed) return "";
+  try {
+    return new URL(trimmed.includes("://") ? trimmed : `http://${trimmed}`).hostname.toLowerCase();
+  } catch {
+    return trimmed.split(/[/:?#]/, 1)[0] ?? "";
+  }
+}
+
+function requestHost(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 function isDownloadType(contentType: string | undefined, attachment: boolean): boolean {
@@ -80,7 +100,13 @@ export function shouldIntercept(details: InterceptDetails, settings: InterceptSe
   if (!["main_frame", "sub_frame", "object"].includes(details.type)) return false;
   if (details.method !== "GET" || details.statusCode < 200 || details.statusCode >= 300 || details.tabId < 0 || details.incognito) return false;
   if ([details.originUrl, details.documentUrl, details.initiator].some((origin) => origin && OMITTED_EXTENSION_HOSTS.some((prefix) => origin.startsWith(prefix)))) return false;
-  if (isExcludedHost(url.hostname.toLowerCase(), settings.excludeHosts)) return false;
+  const requestHosts = [
+    url.hostname,
+    requestHost(details.originUrl),
+    requestHost(details.documentUrl),
+    requestHost(details.initiator),
+  ];
+  if (requestHosts.some((host) => host && isExcludedHost(host, settings.excludeHosts))) return false;
 
   const headers = details.responseHeaders ?? [];
   const disposition = headerValue(headers, "content-disposition") ?? "";
@@ -88,7 +114,8 @@ export function shouldIntercept(details: InterceptDetails, settings: InterceptSe
   if (!isDownloadType(headerValue(headers, "content-type"), attachment)) return false;
   const rawLength = headerValue(headers, "content-length")?.trim();
   const length = rawLength ? Number(rawLength) : Number.NaN;
-  return !Number.isFinite(length) || length < 0 || length >= settings.minimumSizeMB * 1024 * 1024;
+  if (settings.minimumSizeMB <= 0) return true;
+  return Number.isSafeInteger(length) && length >= settings.minimumSizeMB * 1024 * 1024;
 }
 
 export function registerInterception(): void {
@@ -199,7 +226,12 @@ async function transferIntercepted(details: InterceptDetails, settings: Awaited<
   }
   recordInterceptTiming(timing);
   await recordQuietly(label, settings.askBeforeAdding ? "ask" : "start", "sent");
-  await notify(settings.notifications, `Added: ${label}`).catch(() => {});
+  await notify(
+    settings.notifications,
+    settings.askBeforeAdding
+      ? `Waiting for approval in Helios: ${label}`
+      : `Added: ${label}`
+  ).catch(() => {});
   await clearErrorBadge().catch(() => {});
 }
 
@@ -220,7 +252,12 @@ export async function sendFromMenu(item: AddItem, settings: Awaited<ReturnType<t
     return;
   }
   await recordQuietly(label, mode, "sent");
-  await notify(settings.notifications, `Added: ${label}`).catch(() => {});
+  await notify(
+    settings.notifications,
+    mode === "ask"
+      ? `Waiting for approval in Helios: ${label}`
+      : `Added: ${label}`
+  ).catch(() => {});
   await clearErrorBadge().catch(() => {});
 }
 

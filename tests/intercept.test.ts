@@ -53,12 +53,12 @@ describe("shouldIntercept", () => {
     expect(shouldIntercept(eligible, { ...settings, interceptionEnabled: false })).toBe(false);
   });
 
-  it("accepts unknown content length but not a known file below the configured minimum", () => {
-    expect(shouldIntercept({ ...eligible, responseHeaders: [{ name: "Content-Type", value: "application/zip" }] }, settings)).toBe(true);
+  it("keeps files with unknown size in Firefox when a minimum is configured", () => {
+    expect(shouldIntercept({ ...eligible, responseHeaders: [{ name: "Content-Type", value: "application/zip" }] }, settings)).toBe(false);
     expect(shouldIntercept({ ...eligible, responseHeaders: [{ name: "Content-Type", value: "application/zip" }, { name: "Content-Length", value: "4999999" }] }, settings)).toBe(false);
   });
 
   it("intercepts an attachment even when its content type is text", () => {
-    expect(shouldIntercept({ ...eligible, responseHeaders: [{ name: "Content-Type", value: "text/csv" }, { name: "Content-Disposition", value: "attachment; filename=report.csv" }] }, settings)).toBe(true);
+    expect(shouldIntercept({ ...eligible, responseHeaders: [{ name: "Content-Type", value: "text/csv" }, { name: "Content-Disposition", value: "attachment; filename=report.csv" }, { name: "Content-Length", value: "5242880" }] }, settings)).toBe(true);
   });
 });
