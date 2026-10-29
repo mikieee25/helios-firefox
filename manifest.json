@@ -37,6 +37,9 @@
         "required": ["browsingActivity", "websiteActivity"],
         "optional": ["websiteContent"]
       }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
     }
   }
 }
