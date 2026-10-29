@@ -42,6 +42,8 @@ The first-use consent screen describes these data types and destinations. Interc
 
 Requires Node.js 22 or later.
 
+The submitted source was built on Windows 11 Pro with Node.js 26.7.0 and npm 11.19.0. To reproduce the packaged JavaScript, run:
+
 ```sh
 npm ci
 npm run build
