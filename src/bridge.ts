@@ -133,6 +133,7 @@ type PortPing = { port: number; ping: BridgePing };
 const PORTS = Array.from({ length: 10 }, (_, index) => 16_780 + index);
 const CACHE_MS = 10_000;
 const TIMEOUT_MS = 1_500;
+const ADD_TIMEOUT_MS = 7_000;
 
 const success = <T>(value: T, port?: number): BridgeResult<T> => ({ ok: true, value, ...(port ? { port } : {}) });
 const failure = (code: BridgeErrorCode, remainingAttempts?: number, status?: number, kind = errorKind(code), message = ""): BridgeResult<never> => ({
@@ -335,7 +336,8 @@ export class BridgeClient {
 
   private async request<T>(port: number, path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timeout = path === "/v1/add" ? ADD_TIMEOUT_MS : TIMEOUT_MS;
+    const timer = setTimeout(() => controller.abort(), timeout);
     try {
       const response = await this.fetcher.call(globalThis, `http://127.0.0.1:${port}${path}`, {
         ...init,

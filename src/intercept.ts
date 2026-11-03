@@ -1,9 +1,9 @@
-import { bridgeClient, type AddItem, type BridgeResult } from "./bridge";
+import { BridgeError, bridgeClient, type AddItem, type BridgeResult } from "./bridge";
 import { filenameFromHeaders, type Header } from "./filename";
 import { ignoreSet } from "./ignore";
 import { maySendWebsiteContent, type CookiePermissionApi } from "./cookie-permissions";
 import { getSettings, isPaired } from "./settings";
-import { recordSent } from "./sent";
+import { recordSent, type SendFailure } from "./sent";
 import { appendInterceptTiming, type InterceptTiming } from "./intercept-timings";
 
 let interceptTimings: InterceptTiming[] = [];
@@ -206,9 +206,9 @@ async function transferIntercepted(details: InterceptDetails, settings: Awaited<
   try {
     const item = await createAddItem(details.url, details.originUrl ?? details.documentUrl, filename, settings, undefined, undefined, (ms) => { timing.cookiesMs = ms; });
     const result = await addWithCookiePermission(settings.askBeforeAdding ? "ask" : "start", item, settings, undefined, undefined, (ms) => { timing.addMs = ms; });
-    if (!result.ok) throw new Error(result.error.code);
-  } catch {
-    await recordQuietly(label, "start", "error");
+    if (!result.ok) throw result.error;
+  } catch (error) {
+    await recordQuietly(label, "start", "error", sendFailure(error));
     await setErrorBadge().catch(() => {});
     if (settings.fallbackToBrowser) {
       ignoreSet.add(details.url);
@@ -244,9 +244,9 @@ export async function sendFromMenu(item: AddItem, settings: Awaited<ReturnType<t
   const label = item.filename ?? safeHost(item.url);
   try {
     const result = await addWithCookiePermission(mode, item, settings);
-    if (!result.ok) throw new Error(result.error.code);
-  } catch {
-    await recordQuietly(label, mode, "error");
+    if (!result.ok) throw result.error;
+  } catch (error) {
+    await recordQuietly(label, mode, "error", sendFailure(error));
     await setErrorBadge().catch(() => {});
     await notify(settings.notifications, "Could not send this download to Helios.").catch(() => {});
     return;
@@ -274,8 +274,23 @@ async function notify(enabled: boolean, message: string): Promise<void> {
   await browser.notifications.create({ type: "basic", iconUrl: "icon.svg", title: "Helios", message });
 }
 
-async function recordQuietly(label: string, mode: "start" | "ask" | "browser", result: "sent" | "error"): Promise<void> {
-  await recordSent(label, mode, result).catch(() => {});
+async function recordQuietly(
+  label: string,
+  mode: "start" | "ask" | "browser",
+  result: "sent" | "error",
+  failure?: SendFailure
+): Promise<void> {
+  await recordSent(label, mode, result, failure).catch(() => {});
+}
+
+function sendFailure(error: unknown): SendFailure {
+  return error instanceof BridgeError
+    ? {
+        kind: error.kind,
+        code: error.code,
+        ...(error.status === undefined ? {} : { status: error.status }),
+      }
+    : { kind: "client", code: "local_error" };
 }
 
 async function setErrorBadge(): Promise<void> { await browser.action.setBadgeText({ text: "!" }); }

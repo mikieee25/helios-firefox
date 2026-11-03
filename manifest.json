@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Helios Download Bridge",
   "description": "Send browser downloads to the Helios desktop app.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "icons": {
     "32": "helios-32.png",
     "64": "helios-64.png",
@@ -31,7 +31,7 @@
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "browser_specific_settings": {
     "gecko": {
-      "id": "helios-firefox@mikieee25.dev",
+      "id": "helios@mikieee25.dev",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["browsingActivity", "websiteActivity"],

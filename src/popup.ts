@@ -25,7 +25,18 @@ async function refresh(): Promise<void> {
     const label = document.createElement("span");
     label.textContent = item.label;
     const detail = document.createElement("small");
-    detail.textContent = item.result === "error" ? "Could not send" : new Date(item.at).toLocaleTimeString();
+    detail.textContent =
+      item.result === "error"
+        ? item.failure
+          ? [
+              item.failure.kind,
+              item.failure.status === undefined ? "" : `HTTP ${item.failure.status}`,
+              item.failure.code === item.failure.kind ? "" : item.failure.code,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : "Could not send"
+        : new Date(item.at).toLocaleTimeString();
     row.append(label, detail);
     recent.append(row);
   }
